@@ -11,21 +11,6 @@ from IPython.display import display, HTML
 from weasyprint import HTML as weasyHTML
 
 
-parser = argparse.ArgumentParser()
-parser.add_argument('xlfilename',help='Name of the excel file to use')
-parser.add_argument('-V','--verbose',help='Be extra verbose',action='store_true',default=False)
-parser.add_argument('-W','--include-word-count',help='Include a table with the word count',action='store_true',default=False)
-parser.add_argument('-s','--stop-words',nargs='+',type=str,help='Extra stop words, i.e. words NOT to include in the wordcloud and word count. E.g. -s class course lab')
-
-args = parser.parse_args()
-
-if not args.xlfilename.endswith('xlsx'):
-    sys.exit('You must specify a .xlsx file, likely downloaded from Moodle')
-
-stopwords = wordcloud.STOPWORDS
-if args.stop_words is not None:
-    stopwords = stopwords.union(args.stop_words)
-
 def is_nan(x): 
     try: return np.isnan(x) 
     except: return False #isnan only eats strings
@@ -112,7 +97,7 @@ table, th, td
 }
 """
 
-def generatepdf(xl_filename,removeintermediate=False,verbose=False,include_word_count=False):
+def generatepdf(xl_filename,removeintermediate=False,verbose=False,include_word_count=False,stopwords=wordcloud.STOPWORDS,css=css):
     pdf_filename = os.path.splitext(xl_filename)[0] + '.pdf'
     html_filename = os.path.splitext(xl_filename)[0] + '.html'
     wc_filename = os.path.splitext(xl_filename)[0] + '-wordcloud.png'
@@ -262,5 +247,20 @@ def generatepdf(xl_filename,removeintermediate=False,verbose=False,include_word_
     f.close()
     weasyHTML(html_filename).write_pdf(pdf_filename)
 
-        
-generatepdf(xl_filename=args.xlfilename, verbose=args.verbose, include_word_count=args.include_word_count)
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('xlfilename',help='Name of the excel file to use')
+    parser.add_argument('-V','--verbose',help='Be extra verbose',action='store_true',default=False)
+    parser.add_argument('-W','--include-word-count',help='Include a table with the word count',action='store_true',default=False)
+    parser.add_argument('-s','--stop-words',nargs='+',type=str,help='Extra stop words, i.e. words NOT to include in the wordcloud and word count. E.g. -s class course lab')
+
+    args = parser.parse_args()
+
+    if not args.xlfilename.endswith('xlsx'):
+        sys.exit('You must specify a .xlsx file, likely downloaded from Moodle')
+
+    stopwords = wordcloud.STOPWORDS
+    if args.stop_words is not None:
+        stopwords = stopwords.union(args.stop_words)
+
+    generatepdf(xl_filename=args.xlfilename, verbose=args.verbose, include_word_count=args.include_word_count,stopwords=stopwords,css=css)
