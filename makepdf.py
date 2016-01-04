@@ -4,7 +4,8 @@ import argparse,sys,os
 
 from collections import Counter
 from matplotlib import pyplot as plt
-from wordcloud import WordCloud, STOPWORDS
+import wordcloud
+from wordcloud import WordCloud
 import pandas as pd, numpy as np
 from IPython.display import display, HTML 
 from weasyprint import HTML as weasyHTML
@@ -14,16 +15,29 @@ parser = argparse.ArgumentParser()
 parser.add_argument('xlfilename',help='Name of the excel file to use')
 parser.add_argument('-V','--verbose',help='Be extra verbose',action='store_true',default=False)
 parser.add_argument('-W','--include-word-count',help='Include a table with the word count',action='store_true',default=False)
+parser.add_argument('-s','--stop-words',nargs='+',type=str,help='Extra stop words, i.e. words NOT to include in the wordcloud and word count. E.g. -s class course lab')
 
 args = parser.parse_args()
 
 if not args.xlfilename.endswith('xlsx'):
     sys.exit('You must specify a .xlsx file, likely downloaded from Moodle')
 
+stopwords = wordcloud.STOPWORDS
+if args.stop_words is not None:
+    stopwords = stopwords.union(args.stop_words)
+
 def is_nan(x): 
     try: return np.isnan(x) 
     except: return False #isnan only eats strings
 
+def reformat_answer(answer):
+    if is_nan(answer):
+        answer = 'No answer given.'
+    else:
+        if type(answer) in (int, float):
+            answer = str(answer)
+    return answer
+    
 css = """
 p.large-headline {
     font-family: times, Times New Roman, times-roman, georgia, serif;
@@ -61,7 +75,7 @@ p.name {
 }
 p.question {
     font-family: times, Times New Roman, times-roman, georgia, serif;
-    font-size: 18px;
+    font-size: 16px;
     color: #111;
     font-weight: bold;
     margin-top: 0em;
@@ -70,7 +84,7 @@ p.question {
 }
 p.answer {
     font-family: times, Times New Roman, times-roman, georgia, serif;
-    font-size: 18px;
+    font-size: 14px;
     color: #111;
     text-align: justify;
     margin-top: 0em;
@@ -188,21 +202,28 @@ def generatepdf(xl_filename,removeintermediate=False,verbose=False,include_word_
     )
 
     answertext = ''
+        
     for idx in sorted(a):
         html += '''<div class="response">
         <p class="name">Student {i} ({n})</p>
         '''.format(
-                i=idx+1, n=a[idx][questions[-1]]
+                i=idx+1, n=reformat_answer(a[idx][questions[8]])
             )
-        for question in questions[:-1]:
+        # NOTE: the above line assumes that the name is question 9, index 8.
+        
+        # NOTE: the below line loops over all of the questions,
+        # including the name. That's repeated information, which we
+        # could likely remove. We used to go through question[:-1],
+        # but the name comes in before custom questions that the
+        # instructor can choose to add. So, if we want to remove the
+        # name question, we'll need to be smart about matching it
+        # above and below here. For now, this is easiest.
+        for question in questions:
             question_cor_name = question.replace("[InstructorName]", instructor_name)
             if u'\xa0' in question_cor_name: 
                 question_cor_name = question_cor_name.replace(u'\xa0', u' ') #Corrects for unicode encoding error
-            answer = a[idx][question]
-            if is_nan(answer):
-                answer = 'No answer given.'
-            else:
-                answertext = answertext + ' ' + answer
+            answer = reformat_answer(a[idx][question])
+            answertext = answertext + ' ' + answer
             html += '''<p class="question">{q}</p>
             <p class="answer">{a}</p>
             '''.format(q=question_cor_name,a=answer)
@@ -210,7 +231,7 @@ def generatepdf(xl_filename,removeintermediate=False,verbose=False,include_word_
 
     wordcloud = WordCloud(
                       font_path='Fonts/Raleway-Bold.ttf',
-                      stopwords=STOPWORDS,
+                      stopwords=stopwords,
                       background_color='white',
                       width=1800,
                       height=1400
@@ -219,7 +240,7 @@ def generatepdf(xl_filename,removeintermediate=False,verbose=False,include_word_
     plt.axis('off')
     plt.savefig(wc_filename, dpi=300)
 
-    c = Counter([i for i in answertext.lower().split() if i not in STOPWORDS])
+    c = Counter([i for i in answertext.lower().split() if i not in stopwords])
 
     html += '''<div class="content-analysis"><img src="{wc}" style="width:720px;height:560px;"/>'''.format(wc=os.path.split(wc_filename)[-1])
 
