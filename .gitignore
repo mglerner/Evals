@@ -1,6 +1,16 @@
-.DS_Store
+# Private data
 data
 data/
+
+# Mac files
+.DS_Store
+
+# IPython backups
+.ipynb_checkpoints
+.ipynb_checkpoints/
+
+# Emacs backup files
+*~
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from __future__ import division, print_function
 import argparse,sys,os
+import random
 
 from collections import Counter
 from matplotlib import pyplot as plt
@@ -22,6 +23,14 @@ def reformat_answer(answer):
         if type(answer) in (int, float):
             answer = str(answer)
     return answer
+
+# from itertools docs    
+def random_permutation(iterable, r=None):
+    "Random selection from itertools.permutations(iterable, r)"
+    pool = tuple(iterable)
+    r = len(pool) if r is None else r
+    return tuple(random.sample(pool, r))
+
     
 css = """
 p.large-headline {
@@ -97,7 +106,7 @@ table, th, td
 }
 """
 
-def generatepdf(xl_filename,removeintermediate=False,verbose=False,include_word_count=False,stopwords=wordcloud.STOPWORDS,css=css):
+def generatepdf(xl_filename,removeintermediate=False,verbose=False,include_word_count=False,order='forward',stopwords=wordcloud.STOPWORDS,css=css):
     pdf_filename = os.path.splitext(xl_filename)[0] + '.pdf'
     html_filename = os.path.splitext(xl_filename)[0] + '.html'
     wc_filename = os.path.splitext(xl_filename)[0] + '-wordcloud.png'
@@ -181,14 +190,31 @@ def generatepdf(xl_filename,removeintermediate=False,verbose=False,include_word_
 <div>
 <p class="large-headline">{title}</p>
 <p class="medium-headline">{code}<br>{instructor}<br>Answers from {a} of {b} enrolled students</p>
-<div>'''.format(css=css,
+'''.format(css=css,
                 title=course_title,code=course_code,instructor=instructor_name,
                 a=len(a),b=enrollments
     )
 
+    html += '''<div class="content-analysis"><img src="{wc}" style="width:720px;height:560px;"/>'''.format(wc=os.path.split(wc_filename)[-1])
+
+    if include_word_count:
+        html += '''<table>
+          <caption>Most common words</caption>
+          <tr><th>Word</th><th>Count</th></tr>
+        '''
+        for (w,n) in c.most_common(20):
+            html += '<tr><td>{w}</td><td>{n}</td></tr>\n'.format(w=w,n=n)
+        html += '''</table>'''
+    html += '''</div>\n'''
+    html += '''<div>'''
     answertext = ''
-        
-    for idx in sorted(a):
+
+    orderedanswers = sorted(a)
+    if order == 'reverse':
+        orderedanswers = reversed(orderedanswers)
+    elif order == 'random':
+        orderedanswers = random_permutation(orderedanswers)
+    for idx in orderedanswers:
         html += '''<div class="response">
         <p class="name">Student {i} ({n})</p>
         '''.format(
@@ -227,18 +253,7 @@ def generatepdf(xl_filename,removeintermediate=False,verbose=False,include_word_
 
     c = Counter([i for i in answertext.lower().split() if i not in stopwords])
 
-    html += '''<div class="content-analysis"><img src="{wc}" style="width:720px;height:560px;"/>'''.format(wc=os.path.split(wc_filename)[-1])
-
-    if include_word_count:
-        html += '''<table>
-          <caption>Most common words</caption>
-          <tr><th>Word</th><th>Count</th></tr>
-        '''
-        for (w,n) in c.most_common(20):
-            html += '<tr><td>{w}</td><td>{n}</td></tr>\n'.format(w=w,n=n)
-        html += '''</table>'''
     html += '''
-    </div>
     </body>
     </html>
     '''
@@ -253,6 +268,7 @@ if __name__ == '__main__':
     parser.add_argument('-V','--verbose',help='Be extra verbose',action='store_true',default=False)
     parser.add_argument('-W','--include-word-count',help='Include a table with the word count',action='store_true',default=False)
     parser.add_argument('-s','--stop-words',nargs='+',type=str,help='Extra stop words, i.e. words NOT to include in the wordcloud and word count. E.g. -s class course lab')
+    parser.add_argument('-o','--order',default='forward',choices=['forward','reverse','random'],help='Order in which to return the student answers')
 
     args = parser.parse_args()
 
@@ -263,4 +279,4 @@ if __name__ == '__main__':
     if args.stop_words is not None:
         stopwords = stopwords.union(args.stop_words)
 
-    generatepdf(xl_filename=args.xlfilename, verbose=args.verbose, include_word_count=args.include_word_count,stopwords=stopwords,css=css)
+    generatepdf(xl_filename=args.xlfilename, verbose=args.verbose, include_word_count=args.include_word_count,order=args.order, stopwords=stopwords,css=css)
