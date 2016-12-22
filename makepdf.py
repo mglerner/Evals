@@ -20,9 +20,17 @@ def reformat_answer(answer):
     if is_nan(answer):
         answer = 'No answer given.'
     else:
-        if type(answer) in (int, float):
-            answer = str(answer)
+        answer = str(answer)
+        #if type(answer) in (int, float):
+        #    answer = str(answer)
     return answer
+
+def reformat_question(question,instructor_name):
+    question = question.replace("[InstructorName]", instructor_name)
+    if u'\xa0' in question: 
+        question = question.replace(u'\xa0', u' ') #Corrects for unicode encoding error
+    return question
+    
 
 # from itertools docs    
 def random_permutation(iterable, r=None):
@@ -106,10 +114,10 @@ table, th, td
 }
 """
 
-def generatepdf(xl_filename,removeintermediate=False,verbose=False,include_word_count=False,order='forward',stopwords=wordcloud.STOPWORDS,css=css):
-    pdf_filename = os.path.splitext(xl_filename)[0] + '.pdf'
-    html_filename = os.path.splitext(xl_filename)[0] + '.html'
-    wc_filename = os.path.splitext(xl_filename)[0] + '-wordcloud.png'
+def generatepdf(xl_filename,removeintermediate=False,verbose=False,include_word_count=False,order='forward',stopwords=wordcloud.STOPWORDS,css=css,collate='bystudent'):
+    pdf_filename = os.path.splitext(xl_filename)[0] + '_'+collate+'.pdf'
+    html_filename = os.path.splitext(xl_filename)[0] + '_'+collate+'.html'
+    wc_filename = os.path.splitext(xl_filename)[0] + '_'+collate+'-wordcloud.png'
 
     print("I will write out the following files: {p} {h} {w}".format(p=pdf_filename,
                                                                      h=html_filename,
@@ -121,6 +129,13 @@ def generatepdf(xl_filename,removeintermediate=False,verbose=False,include_word_
     answers = pd.io.excel.read_excel(xl_filename,sheetname='RawData')
     questionmap = pd.io.excel.read_excel(xl_filename,sheetname='QuestionMapper')
 
+
+    # Normalize the data ever so slightly: some versions had "Question 1"
+    # and others had "Question_1" and some were internally
+    # inconsistent. Mait it all underscores.
+    answers.columns = [i.replace(' ','_') for i in answers.columns]
+    questionmap['Column'] = [i.replace(' ','_') for i in questionmap['Column']]
+    
     # We want a per-student list of questions and answers. My first
     # thought is to stick everything into a dictionary. We want to
     # make sure to return the results in the correct order, so we
@@ -141,7 +156,7 @@ def generatepdf(xl_filename,removeintermediate=False,verbose=False,include_word_
     # 1" to "What were the most positive features of this course"
     qm = {}
     for (idx,qd) in questionmap.iterrows():
-        qn = qd['Column'].replace(' ','_')
+        qn = qd['Column']
         qt = qd['Question']
         qm[qn] = qt
 
@@ -162,7 +177,7 @@ def generatepdf(xl_filename,removeintermediate=False,verbose=False,include_word_
     for (idx,student) in answers.iterrows():
         a[idx] = {}
         for colname in answers.columns:
-            col_name = colname.replace(' ','_')
+            col_name = colname
             if col_name in qm:
                 #print("Looking up",col_name)
                 a[idx][qm[col_name]] = student[colname]
@@ -206,39 +221,60 @@ def generatepdf(xl_filename,removeintermediate=False,verbose=False,include_word_
             html += '<tr><td>{w}</td><td>{n}</td></tr>\n'.format(w=w,n=n)
         html += '''</table>'''
     html += '''</div>\n'''
-    html += '''<div>'''
+
     answertext = ''
 
-    orderedanswers = sorted(a)
-    if order == 'reverse':
-        orderedanswers = reversed(orderedanswers)
-    elif order == 'random':
-        orderedanswers = random_permutation(orderedanswers)
-    for idx in orderedanswers:
-        html += '''<div class="response">
-        <p class="name">Student {i} ({n})</p>
-        '''.format(
-                i=idx+1, n=reformat_answer(a[idx][questions[8]])
-            )
-        # NOTE: the above line assumes that the name is question 9, index 8.
-        
-        # NOTE: the below line loops over all of the questions,
-        # including the name. That's repeated information, which we
-        # could likely remove. We used to go through question[:-1],
-        # but the name comes in before custom questions that the
-        # instructor can choose to add. So, if we want to remove the
-        # name question, we'll need to be smart about matching it
-        # above and below here. For now, this is easiest.
-        for question in questions:
-            question_cor_name = question.replace("[InstructorName]", instructor_name)
-            if u'\xa0' in question_cor_name: 
-                question_cor_name = question_cor_name.replace(u'\xa0', u' ') #Corrects for unicode encoding error
-            answer = reformat_answer(a[idx][question])
-            answertext = answertext + ' ' + answer
-            html += '''<p class="question">{q}</p>
-            <p class="answer">{a}</p>
-            '''.format(q=question_cor_name,a=answer)
+    if collate=='byquestion':
+
+        for (idx,qd) in questionmap.iterrows():
+            qn = qd['Column']
+            if idx == 8:
+                # This is the 'what is your name' question
+                continue
+            qt = reformat_question(qd['Question'],instructor_name)
+            these_answers = answers[qn]
+            html += '''<div class="response">
+            <p class="name">Question: {q}</p>
+            '''.format(q=qt)
+            for (ii,answer) in enumerate(these_answers):
+                answer = reformat_answer(answer)
+                html += '''<p class="answer"><b>Student {i} ({n}): </b>{a}</p>
+                '''.format(a=answer,i=ii+1,
+                           n=reformat_answer(answers['Question_9'][ii]))
+                answertext = answertext + ' ' + answer
         html += '</div>\n'
+
+    elif collate=='bystudent':
+        orderedanswers = sorted(a)
+        if order == 'reverse':
+            orderedanswers = reversed(orderedanswers)
+        elif order == 'random':
+            orderedanswers = random_permutation(orderedanswers)
+        for idx in orderedanswers:
+            html += '''<div class="response">
+            <p class="name">Student {i} ({n})</p>
+            '''.format(
+                    i=idx+1, n=reformat_answer(a[idx][questions[8]])
+                )
+            # NOTE: the above line assumes that the name is question 9, index 8.
+
+            # NOTE: the below line loops over all of the questions,
+            # including the name. That's repeated information, which we
+            # could likely remove. We used to go through question[:-1],
+            # but the name comes in before custom questions that the
+            # instructor can choose to add. So, if we want to remove the
+            # name question, we'll need to be smart about matching it
+            # above and below here. For now, this is easiest.
+            for question in questions:
+                question_cor_name = reformat_question(question,instructor_name)
+                answer = reformat_answer(a[idx][question])
+                answertext = answertext + ' ' + answer
+                html += '''<p class="question">{q}</p>
+                <p class="answer">{a}</p>
+                '''.format(q=question_cor_name,a=answer)
+            html += '</div>\n'
+
+    # Now loop 
 
     wordcloud = WordCloud(
                       font_path='Fonts/Raleway-Bold.ttf',
@@ -269,6 +305,7 @@ if __name__ == '__main__':
     parser.add_argument('-W','--include-word-count',help='Include a table with the word count',action='store_true',default=False)
     parser.add_argument('-s','--stop-words',nargs='+',type=str,help='Extra stop words, i.e. words NOT to include in the wordcloud and word count. E.g. -s class course lab')
     parser.add_argument('-o','--order',default='forward',choices=['forward','reverse','random'],help='Order in which to return the student answers')
+    parser.add_argument('-c','--collate',default='bystudent',choices=['bystudent','byquestion'],help="Organize the answers by student (old style) or by question (new style)")
 
     args = parser.parse_args()
 
@@ -278,5 +315,7 @@ if __name__ == '__main__':
     stopwords = wordcloud.STOPWORDS
     if args.stop_words is not None:
         stopwords = stopwords.union(args.stop_words)
+    if args.order != 'forward':
+        sys.exit('Random and reverse order have not been fully tested. I think they may break with the student names, and with the by-question ordering.')
 
-    generatepdf(xl_filename=args.xlfilename, verbose=args.verbose, include_word_count=args.include_word_count,order=args.order, stopwords=stopwords,css=css)
+    generatepdf(xl_filename=args.xlfilename, verbose=args.verbose, include_word_count=args.include_word_count,order=args.order, stopwords=stopwords,css=css, collate=args.collate)
