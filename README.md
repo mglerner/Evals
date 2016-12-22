@@ -22,5 +22,10 @@ can edit a few cells and run it.
 2. makepdf.py is a standalone script that will reformat an eval from
 the command line.
 
-At the moment, both are in sync. It would be a good idea to make the
+At the moment, both are in *not* sync. The script is newer.
+It would be a good idea to make the
 notebook import from the script, obviously.
+
+If you're running this from your own installation, you will need to
+make sure it can find the Fonts directory. One easy way is to just put
+the Fonts directory in the directory from which you're running the script.
